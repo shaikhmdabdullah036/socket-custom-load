@@ -1,0 +1,10 @@
+{
+  "name": "socket-test",
+  "packageManager": "yarn@4.6.0",
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "scripts": {
+    "start": "bun index.js"
+  }
+}

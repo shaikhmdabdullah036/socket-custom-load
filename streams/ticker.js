@@ -1,4 +1,5 @@
 const WebSocket = require("ws");
+const { streamIntervals } = require("../config");
 const { generateTicker } = require("../generators/ticker");
 
 function startTickerLoop(wss) {
@@ -9,7 +10,8 @@ function startTickerLoop(wss) {
       if (!socket.clientData?.subscriptions.has("v2/ticker")) continue;
       socket.send(msg);
     }
-    setTimeout(tick, Math.floor(Math.random() * 300) + 200);
+    const { min, max } = streamIntervals["v2/ticker"];
+    setTimeout(tick, Math.floor(Math.random() * (max - min)) + min);
   };
   tick();
 }

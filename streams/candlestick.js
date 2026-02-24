@@ -1,4 +1,5 @@
 const WebSocket = require("ws");
+const { streamIntervals } = require("../config");
 const { generateCandle } = require("../generators/candlestick");
 
 function startCandleLoop(wss) {
@@ -13,7 +14,8 @@ function startCandleLoop(wss) {
         socket.send(JSON.stringify(candle));
       }
     }
-    setTimeout(tick, Math.floor(Math.random() * 30) + 10);
+    const { min, max } = streamIntervals.candlestick;
+    setTimeout(tick, Math.floor(Math.random() * (max - min)) + min);
   };
   tick();
 }

@@ -1,4 +1,5 @@
 const WebSocket = require("ws");
+const { streamIntervals } = require("../config");
 const { generateOrderbook } = require("../generators/l2_orderbook");
 
 function startOrderbookLoop(wss) {
@@ -9,7 +10,8 @@ function startOrderbookLoop(wss) {
       if (!socket.clientData?.subscriptions.has("l2_orderbook")) continue;
       socket.send(msg);
     }
-    setTimeout(tick, Math.floor(Math.random() * 50) + 50);
+    const { min, max } = streamIntervals.l2_orderbook;
+    setTimeout(tick, Math.floor(Math.random() * (max - min)) + min);
   };
   tick();
 }

@@ -1,4 +1,5 @@
 const WebSocket = require("ws");
+const { streamIntervals } = require("../config");
 const { generateTrade } = require("../generators/all_trades");
 
 function startTradeLoop(wss) {
@@ -10,7 +11,8 @@ function startTradeLoop(wss) {
       socket.clientData.lastTradePrice = parseFloat(trade.price);
       socket.send(JSON.stringify(trade));
     }
-    setTimeout(tick, Math.floor(Math.random() * 30) + 10);
+    const { min, max } = streamIntervals.all_trades;
+    setTimeout(tick, Math.floor(Math.random() * (max - min)) + min);
   };
   tick();
 }

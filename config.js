@@ -1,5 +1,14 @@
 const PORT = 8080;
+const HTTP_PORT = 3000;
 const BASE_PRICE = 102900.0;
+
+// Stream intervals in ms [min, max] — mutable at runtime via HTTP API
+const streamIntervals = {
+  all_trades: { min: 10, max: 40 },
+  candlestick: { min: 10, max: 40 },
+  l2_orderbook: { min: 50, max: 100 },
+  "v2/ticker": { min: 200, max: 500 },
+};
 
 const STATIC_CHANNELS = new Set(["all_trades", "l2_orderbook", "v2/ticker"]);
 const CANDLESTICK_REGEX = /^candlestick_(1m|5m|15m|30m|1h|4h|1d|1w)$/;
@@ -30,8 +39,10 @@ const log = (message) => {
 
 module.exports = {
   PORT,
+  HTTP_PORT,
   BASE_PRICE,
   RESOLUTION_MS,
+  streamIntervals,
   isValidChannel,
   parseCandleResolution,
   log,

@@ -1,11 +1,11 @@
-const { BASE_PRICE } = require("../config");
+const { SYMBOLS, randomPrice, formatPrice } = require("../config");
 
-function generateTrade(symbol, lastPrice) {
-  const price = ((lastPrice || BASE_PRICE) + Math.random() * 200 - 100).toFixed(1);
+function generateTrade(symbol) {
+  const price = randomPrice(symbol);
   const size = Math.floor(101 + Math.random() * 10 - 5);
   return {
     buyer_role: Math.random() > 0.5 ? "maker" : "taker",
-    price,
+    price: formatPrice(symbol, price),
     product_id: 27,
     seller_role: Math.random() > 0.5 ? "maker" : "taker",
     size,

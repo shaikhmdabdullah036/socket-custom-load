@@ -1,13 +1,17 @@
-const { BASE_PRICE } = require("../config");
+const { SYMBOLS, randomPrice, formatPrice } = require("../config");
 
 function generateOrderbook(symbol) {
-  const mid = BASE_PRICE + Math.random() * 100 - 50;
+  const s = SYMBOLS[symbol];
+  const mid = randomPrice(symbol);
+  const range = s.max - s.min;
+  const step = range * 0.001; // 0.1% of range per level
+
   const bids = Array.from({ length: 10 }, (_, i) => [
-    (mid - i * 0.5 - Math.random() * 0.5).toFixed(1),
+    formatPrice(symbol, mid - (i + 1) * step - Math.random() * step),
     (Math.random() * 5 + 0.1).toFixed(4),
   ]);
   const asks = Array.from({ length: 10 }, (_, i) => [
-    (mid + i * 0.5 + Math.random() * 0.5).toFixed(1),
+    formatPrice(symbol, mid + (i + 1) * step + Math.random() * step),
     (Math.random() * 5 + 0.1).toFixed(4),
   ]);
   return {

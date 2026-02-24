@@ -1,4 +1,4 @@
-const { isValidChannel, parseCandleResolution, BASE_PRICE, log } = require("./config");
+const { SYMBOLS, isValidChannel, isValidSymbol, parseCandleResolution, formatPrice, log } = require("./config");
 
 function handleMessage(socket, raw) {
   let msg;
@@ -21,6 +21,7 @@ function handleMessage(socket, raw) {
       }
       const symbolSet = socket.clientData.subscriptions.get(name);
       for (const sym of symbols) {
+        if (!isValidSymbol(sym)) continue;
         symbolSet.add(sym);
       }
 
@@ -28,14 +29,17 @@ function handleMessage(socket, raw) {
       const resolution = parseCandleResolution(name);
       if (resolution) {
         for (const sym of symbols) {
+          if (!isValidSymbol(sym)) continue;
           const key = `${resolution}:${sym}`;
           if (!socket.clientData.candles.has(key)) {
+            const s = SYMBOLS[sym];
+            const midPrice = formatPrice(sym, (s.min + s.max) / 2);
             socket.clientData.candles.set(key, {
               startTime: Date.now() * 1000,
-              open: BASE_PRICE,
-              high: BASE_PRICE,
-              low: BASE_PRICE,
-              close: BASE_PRICE,
+              open: midPrice,
+              high: midPrice,
+              low: midPrice,
+              close: midPrice,
               volume: 0,
             });
           }

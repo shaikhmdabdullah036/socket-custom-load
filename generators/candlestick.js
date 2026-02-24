@@ -1,28 +1,35 @@
-const { RESOLUTION_MS } = require("../config");
+const { SYMBOLS, RESOLUTION_MS, formatPrice } = require("../config");
 
 function generateCandle(symbol, candleState, resolution) {
-  const price = candleState.close;
+  const s = SYMBOLS[symbol];
   const now = Date.now() * 1000;
   const resetInterval = RESOLUTION_MS[resolution] * 1000; // in microseconds
 
   if (now - candleState.startTime >= resetInterval) {
     candleState.startTime = now;
-    candleState.open = price;
-    candleState.high = price;
-    candleState.low = price;
+    candleState.open = candleState.close;
+    candleState.high = candleState.close;
+    candleState.low = candleState.close;
     candleState.volume = 0;
   }
 
-  const newPrice = (parseFloat(price) + Math.random() * 20 - 10).toFixed(1);
+  // Small tick relative to the symbol's range
+  const range = s.max - s.min;
+  const tick = range * 0.005; // 0.5% of range per tick
+  const current = parseFloat(candleState.close);
+  let newPrice = current + (Math.random() * 2 - 1) * tick;
+  // Clamp within range
+  newPrice = Math.max(s.min, Math.min(s.max, newPrice));
+
   const size = Math.floor(101 + Math.random() * 10 - 5);
-  candleState.high = Math.max(candleState.high, parseFloat(newPrice)).toFixed(1);
-  candleState.low = Math.min(candleState.low, parseFloat(newPrice)).toFixed(1);
-  candleState.close = newPrice;
+  candleState.high = formatPrice(symbol, Math.max(parseFloat(candleState.high), newPrice));
+  candleState.low = formatPrice(symbol, Math.min(parseFloat(candleState.low), newPrice));
+  candleState.close = formatPrice(symbol, newPrice);
   candleState.volume += size;
 
   return {
     candle_start_time: candleState.startTime,
-    close: newPrice,
+    close: candleState.close,
     high: candleState.high,
     low: candleState.low,
     open: candleState.open,

@@ -1,6 +1,17 @@
 const PORT = 8080;
 const HTTP_PORT = 3000;
-const BASE_PRICE = 102900.0;
+
+// Symbol definitions: price range, decimal precision, tick size for orderbook spread
+const SYMBOLS = {
+  BTCUSD: { min: 60000.0, max: 65000.0, precision: 1 },
+  ETHUSD: { min: 1500.0, max: 2000.0, precision: 2 },
+  XRPUSD: { min: 1.0, max: 2.0, precision: 4 },
+  SOLUSD: { min: 70.0, max: 80.0, precision: 4 },
+  PAXGUSD: { min: 5000.0, max: 5500.0, precision: 2 },
+  DOGEUSD: { min: 0.0, max: 0.1, precision: 6 },
+};
+
+const VALID_SYMBOLS = new Set(Object.keys(SYMBOLS));
 
 // Stream intervals in ms [min, max] — mutable at runtime via HTTP API
 const streamIntervals = {
@@ -28,9 +39,24 @@ function isValidChannel(name) {
   return STATIC_CHANNELS.has(name) || CANDLESTICK_REGEX.test(name);
 }
 
+function isValidSymbol(name) {
+  return VALID_SYMBOLS.has(name);
+}
+
 function parseCandleResolution(channel) {
   const match = channel.match(/^candlestick_(.+)$/);
   return match ? match[1] : null;
+}
+
+// Get a random price within the symbol's range
+function randomPrice(symbol) {
+  const s = SYMBOLS[symbol];
+  return parseFloat((s.min + Math.random() * (s.max - s.min)).toFixed(s.precision));
+}
+
+// Format a number to the symbol's precision
+function formatPrice(symbol, value) {
+  return parseFloat(value).toFixed(SYMBOLS[symbol].precision);
 }
 
 const log = (message) => {
@@ -40,10 +66,14 @@ const log = (message) => {
 module.exports = {
   PORT,
   HTTP_PORT,
-  BASE_PRICE,
+  SYMBOLS,
+  VALID_SYMBOLS,
   RESOLUTION_MS,
   streamIntervals,
   isValidChannel,
+  isValidSymbol,
   parseCandleResolution,
+  randomPrice,
+  formatPrice,
   log,
 };

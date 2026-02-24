@@ -6,10 +6,12 @@ function startTradeLoop(wss) {
   const tick = () => {
     for (const socket of wss.clients) {
       if (socket.readyState !== WebSocket.OPEN) continue;
-      if (!socket.clientData?.subscriptions.has("all_trades")) continue;
-      const trade = generateTrade(socket.clientData.lastTradePrice);
-      socket.clientData.lastTradePrice = parseFloat(trade.price);
-      socket.send(JSON.stringify(trade));
+      const symbols = socket.clientData?.subscriptions.get("all_trades");
+      if (!symbols) continue;
+      for (const sym of symbols) {
+        const trade = generateTrade(sym);
+        socket.send(JSON.stringify(trade));
+      }
     }
     const { min, max } = streamIntervals.all_trades;
     setTimeout(tick, Math.floor(Math.random() * (max - min)) + min);

@@ -1,6 +1,6 @@
 const http = require("http");
 const WebSocket = require("ws");
-const { PORT, HTTP_PORT, BASE_PRICE, streamIntervals, log } = require("./config");
+const { PORT, HTTP_PORT, streamIntervals, log } = require("./config");
 const { handleMessage } = require("./handlers");
 const { startAllStreams } = require("./streams");
 
@@ -12,9 +12,8 @@ wss.on("connection", (socket) => {
   log("Client connected");
 
   socket.clientData = {
-    subscriptions: new Set(),
-    lastTradePrice: BASE_PRICE,
-    candles: new Map(),
+    subscriptions: new Map(), // Map<channelName, Set<symbol>>
+    candles: new Map(),       // Map<"resolution:symbol", candleState>
   };
 
   socket.on("message", (raw) => handleMessage(socket, raw));
@@ -89,4 +88,4 @@ httpServer.listen(HTTP_PORT);
 log(`Server started on ws://localhost:${PORT}`);
 log(`HTTP API on http://localhost:${HTTP_PORT}/intervals`);
 log("Channels: all_trades, candlestick_<res>, l2_orderbook, v2/ticker");
-log('Send: {"type":"subscribe","channels":["all_trades"]} to start receiving data');
+log('Send: {"type":"subscribe","payload":{"channels":[{"name":"all_trades","symbols":["BTCUSD"]}]}}');

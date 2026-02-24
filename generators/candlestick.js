@@ -1,6 +1,6 @@
 const { RESOLUTION_MS } = require("../config");
 
-function generateCandle(candleState, resolution) {
+function generateCandle(symbol, candleState, resolution) {
   const price = candleState.close;
   const now = Date.now() * 1000;
   const resetInterval = RESOLUTION_MS[resolution] * 1000; // in microseconds
@@ -27,8 +27,8 @@ function generateCandle(candleState, resolution) {
     low: candleState.low,
     open: candleState.open,
     resolution,
-    sUID: `BTCUSD_#_BTCUSD_#_1`,
-    symbol: "BTCUSD",
+    sUID: `${symbol}_#_${symbol}_#_1`,
+    symbol,
     timestamp: now,
     type: `candlestick_${resolution}`,
     volume: candleState.volume,

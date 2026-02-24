@@ -1,10 +1,10 @@
 const { BASE_PRICE } = require("../config");
 
-function generateTicker() {
+function generateTicker(symbol) {
   const price = (BASE_PRICE + Math.random() * 200 - 100).toFixed(1);
   return {
     type: "v2/ticker",
-    symbol: "BTCUSD",
+    symbol,
     last_price: price,
     mark_price: (parseFloat(price) + Math.random() * 2 - 1).toFixed(1),
     volume_24h: Math.floor(Math.random() * 100000),

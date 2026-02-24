@@ -1,4 +1,4 @@
-const { isValidChannel, parseCandleResolution, log } = require("./config");
+const { isValidChannel, parseCandleResolution, BASE_PRICE, log } = require("./config");
 
 function handleMessage(socket, raw) {
   let msg;
@@ -8,49 +8,92 @@ function handleMessage(socket, raw) {
     return;
   }
 
-  const { type, channels } = msg;
-  if (!Array.isArray(channels)) return;
+  const { type, payload } = msg;
+  if (!payload || !Array.isArray(payload.channels)) return;
 
   if (type === "subscribe") {
-    for (const ch of channels) {
-      if (isValidChannel(ch)) {
-        socket.clientData.subscriptions.add(ch);
+    for (const ch of payload.channels) {
+      const { name, symbols } = ch;
+      if (!name || !isValidChannel(name) || !Array.isArray(symbols)) continue;
 
-        const resolution = parseCandleResolution(ch);
-        if (resolution && !socket.clientData.candles.has(resolution)) {
-          socket.clientData.candles.set(resolution, {
-            startTime: Date.now() * 1000,
-            open: socket.clientData.lastTradePrice,
-            high: socket.clientData.lastTradePrice,
-            low: socket.clientData.lastTradePrice,
-            close: socket.clientData.lastTradePrice,
-            volume: 0,
-          });
+      if (!socket.clientData.subscriptions.has(name)) {
+        socket.clientData.subscriptions.set(name, new Set());
+      }
+      const symbolSet = socket.clientData.subscriptions.get(name);
+      for (const sym of symbols) {
+        symbolSet.add(sym);
+      }
+
+      // Initialize candle state for new candlestick subscriptions
+      const resolution = parseCandleResolution(name);
+      if (resolution) {
+        for (const sym of symbols) {
+          const key = `${resolution}:${sym}`;
+          if (!socket.clientData.candles.has(key)) {
+            socket.clientData.candles.set(key, {
+              startTime: Date.now() * 1000,
+              open: BASE_PRICE,
+              high: BASE_PRICE,
+              low: BASE_PRICE,
+              close: BASE_PRICE,
+              volume: 0,
+            });
+          }
         }
       }
     }
   } else if (type === "unsubscribe") {
-    for (const ch of channels) {
-      socket.clientData.subscriptions.delete(ch);
-      const resolution = parseCandleResolution(ch);
-      if (resolution) {
-        socket.clientData.candles.delete(resolution);
+    for (const ch of payload.channels) {
+      const { name, symbols } = ch;
+      if (!name) continue;
+
+      if (!symbols || symbols.length === 0) {
+        // No symbols passed — unsubscribe entire channel
+        socket.clientData.subscriptions.delete(name);
+        const resolution = parseCandleResolution(name);
+        if (resolution) {
+          for (const key of socket.clientData.candles.keys()) {
+            if (key.startsWith(`${resolution}:`)) {
+              socket.clientData.candles.delete(key);
+            }
+          }
+        }
+      } else {
+        // Remove specific symbols
+        const symbolSet = socket.clientData.subscriptions.get(name);
+        if (symbolSet) {
+          for (const sym of symbols) {
+            symbolSet.delete(sym);
+            const resolution = parseCandleResolution(name);
+            if (resolution) {
+              socket.clientData.candles.delete(`${resolution}:${sym}`);
+            }
+          }
+          // If no symbols left, remove the channel entirely
+          if (symbolSet.size === 0) {
+            socket.clientData.subscriptions.delete(name);
+          }
+        }
       }
     }
   } else {
     return;
   }
 
+  // Build ack in the same format
+  const ackChannels = [];
+  for (const [name, symbols] of socket.clientData.subscriptions) {
+    ackChannels.push({ name, symbols: [...symbols] });
+  }
+
   socket.send(
     JSON.stringify({
       type: "subscriptions",
-      channels: [...socket.clientData.subscriptions],
+      payload: { channels: ackChannels },
     })
   );
 
-  log(
-    `Client subscriptions: [${[...socket.clientData.subscriptions].join(", ")}]`
-  );
+  log(`Client subscriptions: ${JSON.stringify(ackChannels)}`);
 }
 
 module.exports = { handleMessage };

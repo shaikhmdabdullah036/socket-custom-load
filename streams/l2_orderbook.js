@@ -4,11 +4,13 @@ const { generateOrderbook } = require("../generators/l2_orderbook");
 
 function startOrderbookLoop(wss) {
   const tick = () => {
-    const msg = JSON.stringify(generateOrderbook());
     for (const socket of wss.clients) {
       if (socket.readyState !== WebSocket.OPEN) continue;
-      if (!socket.clientData?.subscriptions.has("l2_orderbook")) continue;
-      socket.send(msg);
+      const symbols = socket.clientData?.subscriptions.get("l2_orderbook");
+      if (!symbols) continue;
+      for (const sym of symbols) {
+        socket.send(JSON.stringify(generateOrderbook(sym)));
+      }
     }
     const { min, max } = streamIntervals.l2_orderbook;
     setTimeout(tick, Math.floor(Math.random() * (max - min)) + min);

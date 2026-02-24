@@ -1,5 +1,5 @@
 const WebSocket = require("ws");
-const { streamIntervals } = require("../config");
+const { streamIntervals, parseCandleResolution } = require("../config");
 const { generateCandle } = require("../generators/candlestick");
 
 function startCandleLoop(wss) {
@@ -7,11 +7,16 @@ function startCandleLoop(wss) {
     for (const socket of wss.clients) {
       if (socket.readyState !== WebSocket.OPEN) continue;
       if (!socket.clientData) continue;
-      for (const [resolution, candleState] of socket.clientData.candles) {
-        if (!socket.clientData.subscriptions.has(`candlestick_${resolution}`))
-          continue;
-        const candle = generateCandle(candleState, resolution);
-        socket.send(JSON.stringify(candle));
+      for (const [channel, symbols] of socket.clientData.subscriptions) {
+        const resolution = parseCandleResolution(channel);
+        if (!resolution) continue;
+        for (const sym of symbols) {
+          const key = `${resolution}:${sym}`;
+          const candleState = socket.clientData.candles.get(key);
+          if (!candleState) continue;
+          const candle = generateCandle(sym, candleState, resolution);
+          socket.send(JSON.stringify(candle));
+        }
       }
     }
     const { min, max } = streamIntervals.candlestick;

@@ -1,6 +1,6 @@
 const { BASE_PRICE } = require("../config");
 
-function generateOrderbook() {
+function generateOrderbook(symbol) {
   const mid = BASE_PRICE + Math.random() * 100 - 50;
   const bids = Array.from({ length: 10 }, (_, i) => [
     (mid - i * 0.5 - Math.random() * 0.5).toFixed(1),
@@ -12,7 +12,7 @@ function generateOrderbook() {
   ]);
   return {
     type: "l2_orderbook",
-    symbol: "BTCUSD",
+    symbol,
     bids,
     asks,
     timestamp: Date.now() * 1000,

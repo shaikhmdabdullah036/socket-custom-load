@@ -15,10 +15,10 @@ const VALID_SYMBOLS = new Set(Object.keys(SYMBOLS));
 
 // Stream intervals in ms [min, max] — mutable at runtime via HTTP API
 const streamIntervals = {
-  all_trades: { min: 10, max: 40 },
-  candlestick: { min: 10, max: 40 },
-  l2_orderbook: { min: 50, max: 100 },
-  "v2/ticker": { min: 200, max: 500 },
+  all_trades: { min: 5, max: 20 },
+  candlestick: { min: 5, max: 20 },
+  l2_orderbook: { min: 10, max: 40 },
+  "v2/ticker": { min: 10, max: 50 },
 };
 
 const STATIC_CHANNELS = new Set(["all_trades", "l2_orderbook", "v2/ticker"]);
@@ -51,7 +51,9 @@ function parseCandleResolution(channel) {
 // Get a random price within the symbol's range
 function randomPrice(symbol) {
   const s = SYMBOLS[symbol];
-  return parseFloat((s.min + Math.random() * (s.max - s.min)).toFixed(s.precision));
+  return parseFloat(
+    (s.min + Math.random() * (s.max - s.min)).toFixed(s.precision),
+  );
 }
 
 // Format a number to the symbol's precision

@@ -26,10 +26,10 @@ docker compose up
 
 | Channel | Description | Default Interval |
 |---------|-------------|-----------------|
-| `all_trades` | Trade executions | 10-40ms |
-| `candlestick_<res>` | OHLCV candles (`1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, `1w`) | 10-40ms |
-| `l2_orderbook` | 10-level bid/ask orderbook | 50-100ms |
-| `v2/ticker` | Price ticker with mark, volume, funding | 200-500ms |
+| `all_trades` | Trade executions | 5-20ms |
+| `candlestick_<res>` | OHLCV candles (`1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, `1w`) | 5-20ms |
+| `l2_orderbook` | 500-level bid/ask orderbook | 10-40ms |
+| `v2/ticker` | Price ticker with mark, volume, funding | 10-50ms |
 
 ## Supported Symbols
 

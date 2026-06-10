@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { wsService } from '../services/WebSocketService';
+import { useThrottledFlush } from './useThrottledFlush';
 import type { TickerData } from '../types';
 
 // Server sends v2/ticker messages with this shape
@@ -28,35 +29,35 @@ function normalize(raw: RawTicker): TickerData {
   };
 }
 
-export function useTicker(symbol: string): TickerData | null {
+export function useTicker(symbol: string, minIntervalMs = 150): TickerData | null {
   const [ticker, setTicker] = useState<TickerData | null>(null);
   const pendingRef = useRef<TickerData | null>(null);
-  const rafRef = useRef<number | null>(null);
 
   const flush = useCallback(() => {
     if (pendingRef.current) {
       setTicker(pendingRef.current);
       pendingRef.current = null;
     }
-    rafRef.current = null;
   }, []);
 
+  const { scheduleFlush, cancelScheduledFlush } = useThrottledFlush(flush, minIntervalMs);
+
   useEffect(() => {
+    setTicker(null);
+    pendingRef.current = null;
+
     const handler = (msg: unknown) => {
       pendingRef.current = normalize(msg as RawTicker);
-
-      // Throttle to animation frame — coalesces bursts under high-frequency streams
-      if (!rafRef.current) {
-        rafRef.current = requestAnimationFrame(flush);
-      }
+      scheduleFlush();
     };
+
     wsService.subscribe('v2/ticker', symbol, handler);
     return () => {
       wsService.unsubscribe('v2/ticker', symbol, handler);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      cancelScheduledFlush();
       pendingRef.current = null;
     };
-  }, [symbol, flush]);
+  }, [symbol, scheduleFlush, cancelScheduledFlush]);
 
   return ticker;
 }

@@ -157,46 +157,121 @@ socket-test/
 
 ## Architecture
 
-![Architecture Diagram](architecture.png)
-
 The system has three layers: a React client (browser), a transport layer
 (WebSocket + HTTP), and a Node.js server that generates and streams synthetic
 market data.
+
+```mermaid
+graph TD
+    subgraph Browser["Browser — React 18 + TypeScript + Vite (:5173)"]
+        direction TB
+        App["App.tsx"]
+        Topbar["topbar<br/>StressControl + ThemeToggle"]
+        ConnStatus["ConnectionStatus"]
+        ProductList["ProductList<br/>TickerRow x 6"]
+        ProductDetail["ProductDetail<br/>DetailTicker + Orderbook + Trades"]
+        Hooks["hooks/<br/>useTicker, useOrderbook, useTrades<br/>useConnectionStatus, useTheme<br/>useThrottledFlush (shared throttle)"]
+        WSService["WebSocketService<br/>(singleton)"]
+        IntervalsApi["intervalsApi.ts"]
+        Favorites["favorites store<br/>(localStorage)"]
+
+        App --> Topbar
+        App --> ConnStatus
+        App --> ProductList
+        App --> ProductDetail
+        ProductList --> Hooks
+        ProductDetail --> Hooks
+        ConnStatus --> Hooks
+        Topbar --> Hooks
+        Topbar --> IntervalsApi
+        ProductList --> Favorites
+        Hooks --> WSService
+    end
+
+    subgraph Server["Server — Node.js (ws + http)"]
+        direction TB
+        WSServer["WebSocket Server<br/>:8080"]
+        HttpApi["HTTP API :3000<br/>GET/POST /intervals (CORS)"]
+        Streams["streams/*<br/>per-channel push loops"]
+        Generators["generators/*<br/>pure data factories"]
+        Config["config.js<br/>streamIntervals (mutable)"]
+
+        WSServer --> Streams
+        Streams --> Generators
+        HttpApi --> Config
+        Streams --> Config
+    end
+
+    WSService <-->|"ws://localhost:8080<br/>subscribe / unsubscribe + stream frames"| WSServer
+    IntervalsApi -->|"POST/GET :3000/intervals"| HttpApi
+```
+
+> `architecture.png` below is the original diagram from the initial
+> implementation. It still accurately describes the **server layer**
+> (`index.js`, `handlers.js`, `config.js`, `streams/*`, `generators/*`, the
+> `:8080` WebSocket server and `:3000` HTTP API). The **browser layer** in
+> that image predates the dark mode, stress-control, and performance-tuning
+> work below — for the current browser architecture, use the file tree,
+> bullets, and Mermaid diagram on this page instead. The diagram above
+> renders natively on GitHub and most Markdown viewers (and degrades to a
+> readable text block where it doesn't), so it should stay legible "in every
+> format".
+
+![Architecture Diagram](architecture.png)
 
 ### Browser layer (`client/`)
 
 ```
 client/src/
-├── App.tsx                        Root component, switches list/detail view
+├── App.tsx                        Root component: topbar + list/detail view
 ├── components/
 │   ├── ConnectionStatus/          Shows live/reconnecting/offline state
+│   ├── StressControl/             Normal/Fast/Extreme → POST /intervals
+│   ├── ThemeToggle/                Light/dark theme switch
 │   ├── ProductList/               Symbol list + per-row ticker (TickerRow)
-│   ├── ProductDetail/             Detail view: orderbook + trades
+│   ├── ProductDetail/             Detail view: ticker header + orderbook + trades
+│   │   └── DetailTicker.tsx        Memoized hero price/stats, own useTicker
 │   ├── Orderbook/                 L2 orderbook table
 │   └── Trades/                    Recent trades feed
 ├── hooks/
 │   ├── useConnectionStatus.ts     Subscribes to wsService status changes
 │   ├── useTicker.ts               Subscribes to v2/ticker, normalizes data
-│   ├── useOrderbook.ts            Subscribes to l2_orderbook, rAF-throttled
-│   └── useTrades.ts               Subscribes to all_trades, keeps last 30
+│   ├── useOrderbook.ts            Subscribes to l2_orderbook, builds 12-level book
+│   ├── useTrades.ts               Subscribes to all_trades, dedupes + caps at 30
+│   ├── useThrottledFlush.ts       Shared timer-based throttle for stream flushes
+│   └── useTheme.ts                 Reads/writes data-theme, persists to localStorage
 ├── services/
-│   └── WebSocketService.ts        Singleton: connect/subscribe/reconnect
+│   ├── WebSocketService.ts        Singleton: connect/subscribe/reconnect
+│   └── intervalsApi.ts             GET/POST :3000/intervals (stress presets)
 ├── store/
 │   └── favorites.ts                Favorites persisted to localStorage
 └── types/
     └── index.ts                    Shared TypeScript types
 ```
 
-- **Components** render UI and call hooks for live data; `App.tsx` always
-  renders `ConnectionStatus` and toggles between `ProductList` and
-  `ProductDetail`.
+- **Components** render UI and call hooks for live data; `App.tsx` renders a
+  `topbar` (`StressControl` + `ThemeToggle`), always renders
+  `ConnectionStatus`, and toggles between `ProductList` and `ProductDetail`.
 - **Hooks** call `wsService.subscribe(channel, symbol, handler)` on mount and
   `unsubscribe` on unmount/symbol change, converting raw server payloads
   (e.g. `RawTicker`, `RawTrade`) into the UI-friendly types in `types/index.ts`.
+  `useTicker`, `useOrderbook`, and `useTrades` all coalesce bursts of incoming
+  messages through the shared `useThrottledFlush` hook (a `setTimeout`-based
+  leading+trailing throttle) before calling `setState`, keeping render rate
+  bounded (~5-10 updates/sec) even when the server streams every 1ms under the
+  Extreme stress preset.
 - **`WebSocketService`** is a singleton that owns the single WebSocket
   connection. It tracks subscriptions in a `Map<'channel:symbol', Set<handler>>`,
   dispatches incoming messages to the matching handlers, and auto-connects on
-  load.
+  load. `disconnect()` plus a Vite `import.meta.hot.dispose` hook close the
+  socket cleanly on HMR reloads so dev-mode edits don't stack duplicate
+  connections.
+- **`useTheme`** toggles `data-theme="light"|"dark"` on `<html>`, persisted to
+  `localStorage`, applied pre-paint via an inline script in `index.html` to
+  avoid a flash of the wrong theme.
+- **`StressControl`** posts `streamIntervals` presets (Normal/Fast/Extreme) to
+  the server's `/intervals` endpoint via `intervalsApi.ts` (see
+  [Runtime Config API](#runtime-config-api)).
 - **`favorites` store** reads/writes the `crypto_favorites` key in
   `localStorage` so favorited symbols persist across reloads.
 

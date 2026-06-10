@@ -27,6 +27,7 @@ export interface Trade {
   size: number;
   side: 'buy' | 'sell';
   timestamp: number; // ms
+  timeLabel: string;
 }
 
 export interface Product {

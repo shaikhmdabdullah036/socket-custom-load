@@ -57,9 +57,10 @@ A singleton that owns the single WebSocket connection for the app's lifetime.
 
 | Hook | Channel | Notes |
 |------|---------|-------|
-| `useTicker(symbol)` | `v2/ticker` | Normalises raw server shape → `TickerData`; rAF-throttled (coalesces bursts to ≤60fps) |
-| `useOrderbook(symbol)` | `l2_orderbook` | rAF throttle — max 60fps render regardless of server rate |
-| `useTrades(symbol)` | `all_trades` | Buffers incoming trades and flushes via rAF, prepends batch, caps at 30 |
+| `useTicker(symbol, minIntervalMs?)` | `v2/ticker` | Normalises raw server shape → `TickerData`; flushed via `useThrottledFlush` (default 150ms ≈ 6.7/sec; `DetailTicker` passes 200ms ≈ 5/sec) |
+| `useOrderbook(symbol)` | `l2_orderbook` | Builds a 12-level book with cumulative totals; flushed via `useThrottledFlush` at 100ms (≈10/sec) regardless of server rate |
+| `useTrades(symbol)` | `all_trades` | Buffers incoming trades, dedupes by id, caps the internal buffer at 50 and the displayed list at 30; flushed via `useThrottledFlush` at 100ms |
+| `useThrottledFlush(flush, minIntervalMs?)` | — | Shared `setTimeout`-based leading+trailing throttle used by the three hooks above — runs `flush` immediately if idle, otherwise schedules a single trailing call so updates can't pile up |
 | `useConnectionStatus()` | — | Subscribes to service status notifications |
 | `useTheme()` | — | Reads/writes `data-theme` on `<html>`, persists to localStorage |
 
@@ -78,21 +79,25 @@ App
 ├── ProductList
 │   └── TickerRow × 6   React.memo — only re-renders on own ticker update
 └── ProductDetail
-    ├── Orderbook        React.memo + rAF throttle
-    └── Trades           React.memo + highlight animation on new trade
+    ├── DetailTicker     React.memo — hero price + stats, own useTicker(symbol, 200)
+    ├── Orderbook        React.memo, useThrottledFlush, stable index-based row keys
+    └── Trades           React.memo TradeRow rows + highlight animation on new trade
 ```
 
 ### Performance decisions
 
 | Problem | Solution |
 |---------|----------|
-| Orderbook fires 10–40ms at default, faster under stress | `pendingRef` + `requestAnimationFrame` — renders at 60fps max |
-| Ticker fires 10–50ms at default, faster under stress | Same rAF coalescing pattern in `useTicker` — only the latest tick per frame is rendered |
-| Trades fire 5–20ms at default, much faster under stress | `useTrades` buffers all trades arriving within a frame and flushes them as one state update via rAF, instead of one `setState` per message |
+| Orderbook/ticker/trades fire every 1–50ms under stress, far faster than the UI needs to redraw | Each stream hook (`useTicker`, `useOrderbook`, `useTrades`) buffers the latest payload in a ref and flushes via the shared `useThrottledFlush` hook — a `setTimeout`-based leading+trailing throttle (100ms for orderbook/trades ≈ 10/sec, 150–200ms for ticker ≈ 5–6.7/sec) — so `setState` runs at a bounded rate regardless of server rate |
+| Trades list growing unbounded under high-frequency streams | `useTrades` caps its internal buffer at 50 and dedupes by trade id (`Set`) before slicing to the displayed 30, so duplicate/late messages from a throttled batch don't double-count |
+| Orderbook rows remounting on every throttle tick under Extreme mode dragged the scroll position via browser scroll-anchoring (price-based row keys changed every tick since the mock generator returns fresh random levels) | `OrderRow` keys are stable index-based slots (`ask-${i}`/`bid-${i}` — the i-th best ask/bid) so React reconciles in place; `.ob-body` also sets `overflow-anchor: none` as a backstop |
+| Orderbook depth-bar width animating on every update fought the throttle, causing visible jank | Removed the `.ob-depth` width transition — bars snap to the new value each flush |
+| High-frequency lists (`Orderbook`, `Trades`) leaking layout/paint cost into the rest of the page | `contain: strict` on `.ob-body` / `.trades-body` isolates their layout, paint, and size from the rest of the tree |
+| `ProductDetail`'s hero ticker re-rendering the whole detail view (orderbook + trades) on every tick | Extracted `DetailTicker` as its own `React.memo` component with its own `useTicker(symbol, 200)` subscription |
 | All TickerRows on list view | `React.memo` on `TickerRow` — only changed symbol re-renders |
-| Trades list growing unbounded | Hard cap at 30 items with `.slice(0, 30)` |
 | WS reconnection storms | Exponential backoff capped at 30s |
 | Multiple components on same symbol re-subscribing | Service deduplicates: one WS sub per channel:symbol |
+| Stale/duplicate WebSocket connections after Vite HMR reloads in dev | `WebSocketService.disconnect()` runs from `import.meta.hot.dispose`, closing the old socket before the reloaded module reconnects |
 | Theme flash on page load | Inline script in `index.html` sets `data-theme` before first paint |
 
 ### Dark mode
@@ -112,7 +117,7 @@ App
   | Fast | 50–90ms | 50–90ms | 50–90ms |
   | Extreme | 1–2ms | 1–5ms | 1–5ms |
 - The server's HTTP API didn't send CORS headers, so a browser fetch from `http://localhost:5173` to `http://localhost:3000` was blocked. Added `Access-Control-Allow-Origin`/`Methods`/`Headers` plus an `OPTIONS` preflight handler in the root `index.js`.
-- The app remains smooth at the Extreme preset because of the rAF throttling/batching described above — verified no dropped frames or runaway memory with all three streams (ticker, trades, orderbook) open simultaneously.
+- The app remains smooth at the Extreme preset because of the throttling, capping/dedupe, and CSS containment described above — verified low CPU, bounded DOM node count, and stable JS heap with all three streams (ticker, trades, orderbook) open simultaneously.
 
 ## What I'd improve with more time
 

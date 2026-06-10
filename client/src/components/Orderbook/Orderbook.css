@@ -9,7 +9,9 @@
 .ob-body {
   flex: 1;
   overflow-y: auto;
+  overflow-anchor: none;
   min-height: 0;
+  contain: strict;
 }
 
 .ob-title {
@@ -48,7 +50,6 @@
   bottom: 0;
   right: 0;
   z-index: 0;
-  transition: width 0.1s ease;
 }
 
 .ob-depth-ask { background: var(--depth-ask); }

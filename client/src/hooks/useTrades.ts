@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { wsService } from '../services/WebSocketService';
+import { useThrottledFlush } from './useThrottledFlush';
 import type { Trade } from '../types';
 
 interface RawTrade {
@@ -12,52 +13,74 @@ interface RawTrade {
 }
 
 const MAX_TRADES = 30;
-let tradeCounter = 0;
+const MAX_BUFFER = 50;
+
+function formatTradeTime(timestampMs: number): string {
+  return new Date(timestampMs).toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
 
 export function useTrades(symbol: string): Trade[] {
   const [trades, setTrades] = useState<Trade[]>([]);
   const bufferRef = useRef<Trade[]>([]);
-  const rafRef = useRef<number | null>(null);
+  const idRef = useRef(0);
 
   const flush = useCallback(() => {
-    if (bufferRef.current.length > 0) {
-      // Buffer holds trades oldest→newest; newest goes to the front of the list
-      const incoming = bufferRef.current.reverse();
-      bufferRef.current = [];
-      setTrades((prev) => [...incoming, ...prev].slice(0, MAX_TRADES));
-    }
-    rafRef.current = null;
+    if (bufferRef.current.length === 0) return;
+
+    const incoming = bufferRef.current;
+    bufferRef.current = [];
+
+    setTrades((prev) => {
+      const merged = [...incoming.reverse(), ...prev];
+      const seen = new Set<string>();
+      const next: Trade[] = [];
+      for (const trade of merged) {
+        if (seen.has(trade.id)) continue;
+        seen.add(trade.id);
+        next.push(trade);
+        if (next.length >= MAX_TRADES) break;
+      }
+      return next;
+    });
   }, []);
 
+  const { scheduleFlush, cancelScheduledFlush } = useThrottledFlush(flush, 100);
+
   useEffect(() => {
-    setTrades([]); // reset when symbol changes
+    setTrades([]);
     bufferRef.current = [];
+    idRef.current = 0;
 
     const handler = (msg: unknown) => {
       const raw = msg as RawTrade;
+      const timestampMs = Math.floor(raw.timestamp / 1000);
       const trade: Trade = {
-        id: `${raw.timestamp}-${++tradeCounter}`,
+        id: `${++idRef.current}`,
         price: parseFloat(raw.price),
         size: raw.size,
-        // taker buyer = aggressor buy; taker seller = aggressor sell
         side: raw.buyer_role === 'taker' ? 'buy' : 'sell',
-        timestamp: Math.floor(raw.timestamp / 1000), // µs → ms
+        timestamp: timestampMs,
+        timeLabel: formatTradeTime(timestampMs),
       };
 
       bufferRef.current.push(trade);
-      // Throttle to animation frame — coalesces bursts under high-frequency streams
-      if (!rafRef.current) {
-        rafRef.current = requestAnimationFrame(flush);
+      if (bufferRef.current.length > MAX_BUFFER) {
+        bufferRef.current = bufferRef.current.slice(-MAX_BUFFER);
       }
+      scheduleFlush();
     };
 
     wsService.subscribe('all_trades', symbol, handler);
     return () => {
       wsService.unsubscribe('all_trades', symbol, handler);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      cancelScheduledFlush();
       bufferRef.current = [];
     };
-  }, [symbol, flush]);
+  }, [symbol, scheduleFlush, cancelScheduledFlush]);
 
   return trades;
 }

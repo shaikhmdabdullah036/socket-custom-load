@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { wsService } from '../services/WebSocketService';
+import { useThrottledFlush } from './useThrottledFlush';
 import type { OrderbookData, OrderbookLevel } from '../types';
 
 // Server sends bids/asks as [price_string, qty_string] tuples, 500 levels
@@ -23,36 +24,35 @@ function buildLevels(raw: [string, string][], limit: number): OrderbookLevel[] {
 export function useOrderbook(symbol: string): OrderbookData | null {
   const [orderbook, setOrderbook] = useState<OrderbookData | null>(null);
   const pendingRef = useRef<OrderbookData | null>(null);
-  const rafRef = useRef<number | null>(null);
 
   const flush = useCallback(() => {
     if (pendingRef.current) {
       setOrderbook(pendingRef.current);
       pendingRef.current = null;
     }
-    rafRef.current = null;
   }, []);
 
+  const { scheduleFlush, cancelScheduledFlush } = useThrottledFlush(flush, 100);
+
   useEffect(() => {
+    setOrderbook(null);
+    pendingRef.current = null;
+
     const handler = (msg: unknown) => {
       const raw = msg as RawOrderbook;
-      // Bids: descending price (best bid first), asks: ascending price (best ask first)
       const bids = buildLevels(raw.bids, DEPTH_LEVELS);
       const asks = buildLevels(raw.asks, DEPTH_LEVELS);
       pendingRef.current = { symbol: raw.symbol, bids, asks };
-
-      // Throttle to animation frame — prevents jank at high frequency
-      if (!rafRef.current) {
-        rafRef.current = requestAnimationFrame(flush);
-      }
+      scheduleFlush();
     };
 
     wsService.subscribe('l2_orderbook', symbol, handler);
     return () => {
       wsService.unsubscribe('l2_orderbook', symbol, handler);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      cancelScheduledFlush();
+      pendingRef.current = null;
     };
-  }, [symbol, flush]);
+  }, [symbol, scheduleFlush, cancelScheduledFlush]);
 
   return orderbook;
 }

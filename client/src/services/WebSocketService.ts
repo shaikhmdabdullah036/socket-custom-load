@@ -1,3 +1,5 @@
+import { parseSubscriptionKey, subscriptionKey } from '../utils/subscriptionKey';
+
 type MessageHandler = (data: unknown) => void;
 type StatusListener = (status: string) => void;
 
@@ -16,7 +18,12 @@ class WebSocketService {
   }
 
   connect() {
-    if (this.ws?.readyState === WebSocket.OPEN) return;
+    if (
+      this.ws &&
+      (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
 
     this.ws = new WebSocket(this.url);
     this.notifyStatus('reconnecting');
@@ -38,7 +45,7 @@ class WebSocketService {
         const symbol = msg.symbol as string;
         if (!channel || !symbol) return;
 
-        const key = `${channel}:${symbol}`;
+        const key = subscriptionKey(channel, symbol);
         const handlers = this.handlers.get(key);
         handlers?.forEach((h) => h(msg));
       } catch {
@@ -47,6 +54,7 @@ class WebSocketService {
     };
 
     this.ws.onclose = () => {
+      this.ws = null;
       this.notifyStatus('disconnected');
       this.scheduleReconnect();
     };
@@ -56,8 +64,20 @@ class WebSocketService {
     };
   }
 
+  disconnect() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.ws) {
+      this.ws.onclose = null;
+      this.ws.close();
+      this.ws = null;
+    }
+  }
+
   subscribe(channel: string, symbol: string, handler: MessageHandler) {
-    const key = `${channel}:${symbol}`;
+    const key = subscriptionKey(channel, symbol);
     const isNew = !this.handlers.has(key) || this.handlers.get(key)!.size === 0;
 
     if (!this.handlers.has(key)) {
@@ -71,7 +91,7 @@ class WebSocketService {
   }
 
   unsubscribe(channel: string, symbol: string, handler: MessageHandler) {
-    const key = `${channel}:${symbol}`;
+    const key = subscriptionKey(channel, symbol);
     const set = this.handlers.get(key);
     if (!set) return;
 
@@ -99,7 +119,7 @@ class WebSocketService {
     // Group active subscriptions by channel
     const byChannel = new Map<string, string[]>();
     for (const key of this.handlers.keys()) {
-      const [channel, symbol] = key.split(':');
+      const { channel, symbol } = parseSubscriptionKey(key);
       if (!byChannel.has(channel)) byChannel.set(channel, []);
       byChannel.get(channel)!.push(symbol);
     }
@@ -130,3 +150,9 @@ class WebSocketService {
 
 export const wsService = new WebSocketService('ws://localhost:8080');
 wsService.connect();
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    wsService.disconnect();
+  });
+}

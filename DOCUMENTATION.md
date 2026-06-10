@@ -56,16 +56,20 @@ socket-custom-load/
         ├── store/favorites.ts              # localStorage favorites helper
         ├── hooks/
         │   ├── useConnectionStatus.ts
-        │   ├── useTicker.ts                # rAF-throttled
-        │   ├── useOrderbook.ts             # rAF-throttled
-        │   ├── useTrades.ts                # rAF-batched
+        │   ├── useTicker.ts                # throttled via useThrottledFlush
+        │   ├── useOrderbook.ts             # throttled via useThrottledFlush
+        │   ├── useTrades.ts                # throttled + deduped via useThrottledFlush
+        │   ├── useThrottledFlush.ts        # shared setTimeout-based leading+trailing throttle
         │   └── useTheme.ts                 # light/dark theme, persisted to localStorage
+        ├── utils/
+        │   └── subscriptionKey.ts          # "channel:symbol" key helpers
         └── components/
             ├── ConnectionStatus/           # Banner shown when WS is down
             ├── ThemeToggle/                # Light/dark mode switch (topbar)
             ├── StressControl/              # Normal/Fast/Extreme update-speed presets (topbar)
             ├── ProductList/               # Markets list with search + tabs
             ├── ProductDetail/             # Full detail view (stats + orderbook + trades)
+            │   └── DetailTicker.tsx        # Memoized hero price/stats, own useTicker(symbol, 200)
             ├── Orderbook/                 # L2 orderbook with depth bars
             └── Trades/                   # Recent trades feed
 ```
@@ -240,11 +244,13 @@ wsService.connect();
 
 Each hook encapsulates one subscription lifecycle:
 
-**`useTicker(symbol)`** — subscribes to `v2/ticker` for the symbol. Normalizes the raw server message into a clean `TickerData` object (e.g., converts `ltp_change_24h` ratio to a `change_24h` percentage). Updates are coalesced via `requestAnimationFrame` — the latest message per frame is what gets rendered, so high-frequency ticks (down to 1 ms under the Extreme stress preset) don't each trigger a separate re-render.
+**`useTicker(symbol, minIntervalMs?)`** — subscribes to `v2/ticker` for the symbol. Normalizes the raw server message into a clean `TickerData` object (e.g., converts `ltp_change_24h` ratio to a `change_24h` percentage). The latest message is buffered in a ref and flushed via `useThrottledFlush` (default 150ms ≈ 6.7/sec; `DetailTicker` passes 200ms ≈ 5/sec), so high-frequency ticks (down to 1 ms under the Extreme stress preset) don't each trigger a separate re-render.
 
-**`useOrderbook(symbol)`** — subscribes to `l2_orderbook`. Because orderbook updates arrive very fast (10–40 ms, faster under stress), it uses `requestAnimationFrame` to throttle state updates to the browser's paint cycle, preventing jank. Only the top 12 levels are rendered.
+**`useOrderbook(symbol)`** — subscribes to `l2_orderbook`, builds a 12-level book with cumulative totals from the 500-level snapshot, and flushes via `useThrottledFlush` at 100ms (≈10/sec) regardless of how fast the server streams.
 
-**`useTrades(symbol)`** — subscribes to `all_trades`. Determines buy/sell side from `buyer_role === 'taker'`. Incoming trades are pushed into a buffer and flushed once per animation frame as a single batched state update (instead of one `setState` per message), then capped at 30.
+**`useTrades(symbol)`** — subscribes to `all_trades`. Determines buy/sell side from `buyer_role === 'taker'`. Incoming trades are pushed into a buffer (capped at 50, deduped by trade id) and flushed via `useThrottledFlush` at 100ms as a single batched state update, then sliced to the displayed 30.
+
+**`useThrottledFlush(flush, minIntervalMs?)`** — shared `setTimeout`-based leading+trailing throttle used by the three hooks above. Runs `flush` immediately if idle, otherwise schedules a single trailing call so updates can't pile up regardless of message rate.
 
 **`useConnectionStatus()`** — listens to `wsService.onStatusChange` and returns the current status string.
 
@@ -264,11 +270,13 @@ Each hook encapsulates one subscription lifecycle:
 
 **`TickerRow`** — wrapped in `React.memo`. Each row independently calls `useTicker` for its own symbol — so 6 rows = 6 independent WebSocket subscriptions. Updates to one row don't re-render others.
 
-**`ProductDetail`** — the detail view. Shows ticker stats, then renders `Orderbook` and `Trades` side by side.
+**`ProductDetail`** — the detail view. Renders `DetailTicker` for the hero stats, then `Orderbook` and `Trades` side by side.
 
-**`Orderbook`** — wrapped in `React.memo`. Displays asks (reversed, best ask nearest the spread) and bids with a colored depth visualization bar. Computes and displays the spread in absolute and percentage terms.
+**`DetailTicker`** — wrapped in `React.memo`, with its own `useTicker(symbol, 200)` subscription. Extracted from `ProductDetail` so ticker updates re-render only the hero stats, not the orderbook/trades panels.
 
-**`Trades`** — wrapped in `React.memo`. Shows the 30 most recent trades with a flash animation on the newest entry.
+**`Orderbook`** — wrapped in `React.memo`. Displays asks (reversed, best ask nearest the spread) and bids with a colored depth visualization bar. Computes and displays the spread in absolute and percentage terms. `OrderRow` keys are stable index-based slots (`ask-${i}`/`bid-${i}`, the i-th best ask/bid) rather than price-based, and `.ob-body` sets `contain: strict` + `overflow-anchor: none`, so high-frequency snapshot updates don't cause remount churn or scroll drift.
+
+**`Trades`** — wrapped in `React.memo`, rendering memoized `TradeRow` items. Shows the 30 most recent trades with a flash animation on the newest entry, applied via `useEffect` and a 700ms timeout.
 
 ### Types (`src/types/index.ts`)
 
@@ -575,9 +583,13 @@ Serve `client/dist/` from any static file server. Make sure `ws://localhost:8080
 
 **Per-client subscription state** — Each WebSocket connection tracks its own subscriptions independently. If client A subscribes to BTCUSD and client B subscribes to ETHUSD, they each only receive data for what they asked for.
 
-**requestAnimationFrame throttling/batching across all live-data hooks** — `useOrderbook`, `useTicker`, and `useTrades` all funnel incoming WebSocket messages into a ref and flush at most once per animation frame (`useTrades` additionally batches every trade that arrived since the last frame into a single state update). Without this, each message would trigger its own React re-render — at the Extreme stress preset (1–5 ms per message) that's hundreds of re-renders per second per symbol. With rAF coalescing, render rate is capped at the display refresh rate (~60fps) regardless of how fast the server streams.
+**Timer-based throttling across all live-data hooks** — `useOrderbook`, `useTicker`, and `useTrades` all funnel incoming WebSocket messages into a ref and flush via the shared `useThrottledFlush` hook, a `setTimeout`-based leading+trailing throttle (100ms for orderbook/trades ≈ 10/sec, 150–200ms for ticker ≈ 5–6.7/sec). `useTrades` additionally caps its buffer at 50 and dedupes by trade id before flushing. Without this, each message would trigger its own React re-render — at the Extreme stress preset (1–5 ms per message) that's hundreds of re-renders per second per symbol. An earlier `requestAnimationFrame`-based version (~60fps cap) still left enough headroom under Extreme to drive CPU to ~93%, DOM nodes past 65k, and JS heap to ~93MB; the lower, tunable throttle interval brought these down to roughly ~10% CPU, ~2k DOM nodes, and ~31MB heap.
 
-**React.memo on hot components** — `TickerRow`, `Orderbook`, `Trades`, and `OrderRow` are all wrapped in `React.memo`. Since ticker data arrives continuously, without memoization every ticker update would re-render the entire component tree.
+**Stable list keys + scroll/layout containment for the orderbook** — `OrderRow` keys are index-based (`ask-${i}`/`bid-${i}`, the i-th best ask/bid) rather than price-based, so React reconciles rows in place instead of remounting the whole list every throttle tick (the mock generator returns fresh random price levels on every snapshot). `.ob-body` and `.trades-body` set `contain: strict` and `.ob-body` also sets `overflow-anchor: none`, isolating their layout/paint from the rest of the page and preventing scroll-position drift under high-frequency updates.
+
+**HMR-safe WebSocket singleton** — `WebSocketService.disconnect()` runs from `import.meta.hot.dispose`, so a Vite hot-reload in dev closes the old socket before the reloaded module reconnects, preventing duplicate connections/subscriptions from accumulating across edits.
+
+**React.memo on hot components** — `TickerRow`, `DetailTicker`, `Orderbook`, `OrderRow`, `Trades`, and `TradeRow` are all wrapped in `React.memo`. Since ticker data arrives continuously, without memoization every ticker update would re-render the entire component tree.
 
 **CSS custom properties for theming** — All colors live as CSS variables on `:root` (light) and are overridden under `[data-theme='dark']` in `App.css`. Component stylesheets reference `var(--bg-card)`, `var(--text-primary)`, etc. instead of hardcoded hex values, so adding/adjusting a theme is a one-file change. `useTheme` persists the choice to `localStorage` and a pre-paint inline script in `index.html` prevents a flash of the wrong theme on reload.
 

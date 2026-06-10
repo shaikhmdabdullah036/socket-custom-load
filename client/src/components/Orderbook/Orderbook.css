@@ -1,0 +1,78 @@
+.orderbook {
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.ob-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.ob-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 10px;
+}
+
+.ob-header {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  padding: 4px 0 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.ob-header .right {
+  text-align: right;
+}
+
+.ob-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  padding: 3px 0;
+  overflow: hidden;
+}
+
+.ob-depth {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  z-index: 0;
+  transition: width 0.1s ease;
+}
+
+.ob-depth-ask { background: var(--depth-ask); }
+.ob-depth-bid { background: var(--depth-bid); }
+
+.ob-price,
+.ob-qty,
+.ob-total {
+  position: relative;
+  z-index: 1;
+}
+
+.ob-price-ask { color: var(--color-negative); font-weight: 500; }
+.ob-price-bid { color: var(--color-positive); font-weight: 500; }
+
+.ob-qty  { text-align: right; color: var(--text-tertiary); }
+.ob-total { text-align: right; color: var(--text-muted); }
+
+.spread-row {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 5px 0;
+  border-top: 1px solid var(--border-color-light);
+  border-bottom: 1px solid var(--border-color-light);
+  margin: 2px 0;
+}

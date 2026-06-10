@@ -1,0 +1,62 @@
+.stress-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stress-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.stress-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.stress-btn {
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.stress-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.stress-btn:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.stress-btn.active.stress-btn-normal {
+  background: var(--color-positive);
+  border-color: var(--color-positive);
+  color: #fff;
+}
+
+.stress-btn.active.stress-btn-fast {
+  background: #f59e0b;
+  border-color: #f59e0b;
+  color: #fff;
+}
+
+.stress-btn.active.stress-btn-extreme {
+  background: var(--color-negative);
+  border-color: var(--color-negative);
+  color: #fff;
+}
+
+.stress-error {
+  font-size: 11px;
+  color: var(--color-negative);
+}

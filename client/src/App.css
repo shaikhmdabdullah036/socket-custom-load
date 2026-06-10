@@ -1,0 +1,110 @@
+:root {
+  --bg-page: #f3f4f6;
+  --bg-card: #ffffff;
+  --bg-hover: #f9fafb;
+  --bg-input: #ffffff;
+
+  --border-color: #e5e7eb;
+  --border-color-light: #f3f4f6;
+
+  --text-primary: #111111;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --text-tertiary: #374151;
+
+  --color-positive: #16a34a;
+  --color-negative: #dc2626;
+  --color-positive-bg: #dcfce7;
+  --color-negative-bg: #fee2e2;
+  --color-warning: #f59e0b;
+
+  --accent: #6366f1;
+  --tab-active-bg: #1a1a2e;
+  --tab-active-text: #ffffff;
+  --star-inactive: #d1d5db;
+
+  --depth-bid: rgba(22, 163, 74, 0.08);
+  --depth-ask: rgba(220, 38, 38, 0.08);
+  --highlight: rgba(253, 224, 71, 0.35);
+}
+
+[data-theme='dark'] {
+  --bg-page: #0d0f14;
+  --bg-card: #161922;
+  --bg-hover: #1f232e;
+  --bg-input: #1f232e;
+
+  --border-color: #2a2e3a;
+  --border-color-light: #20242e;
+
+  --text-primary: #f3f4f6;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --text-tertiary: #d1d5db;
+
+  --color-positive: #22c55e;
+  --color-negative: #f87171;
+  --color-positive-bg: rgba(34, 197, 94, 0.16);
+  --color-negative-bg: rgba(248, 113, 113, 0.16);
+  --color-warning: #fbbf24;
+
+  --accent: #818cf8;
+  --tab-active-bg: #6366f1;
+  --tab-active-text: #ffffff;
+  --star-inactive: #4b5563;
+
+  --depth-bid: rgba(34, 197, 94, 0.14);
+  --depth-ask: rgba(248, 113, 113, 0.14);
+  --highlight: rgba(253, 224, 71, 0.18);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  background: var(--bg-page);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.app-shell {
+  max-width: 980px;
+  height: calc(100vh - 64px); /* 32px top + 32px bottom margin */
+  margin: 32px auto;
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  flex-shrink: 0;
+}
+
+.topbar-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.topbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
